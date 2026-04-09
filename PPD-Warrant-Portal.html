@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>PPD Warrant Generator</title>
+<!-- No external libraries needed — Word doc generation is fully self-contained -->
+<style>
+  :root {
+    --bg:       #0d1117;
+    --surface:  #161b22;
+    --border:   #30363d;
+    --blue:     #1f6feb;
+    --blue-dim: #163a6b;
+    --text:     #e6edf3;
+    --muted:    #8b949e;
+    --green:    #3fb950;
+    --amber:    #e3b341;
+    --red:      #f85149;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ── */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .badge {
+    width: 44px; height: 44px;
+    background: var(--blue);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; flex-shrink: 0;
+  }
+  header h1 { font-size: 18px; font-weight: 700; letter-spacing: .3px; }
+  header p  { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .header-right { margin-left: auto; }
+  #settingsBtn {
+    background: none; border: 1px solid var(--border);
+    color: var(--muted); border-radius: 6px;
+    padding: 6px 12px; cursor: pointer; font-size: 13px;
+  }
+  #settingsBtn:hover { border-color: var(--blue); color: var(--text); }
+
+  /* ── API Key Panel ── */
+  #apiPanel {
+    background: #1a1f28;
+    border-bottom: 2px solid var(--amber);
+    padding: 20px 24px;
+  }
+  #apiPanel.hidden { display: none; }
+  #apiPanel h3 { font-size: 14px; margin-bottom: 6px; color: var(--amber); }
+  #apiPanel p  { font-size: 12px; color: var(--muted); margin-bottom: 12px; line-height: 1.5; }
+  .api-row { display: flex; gap: 10px; align-items: center; }
+  #apiKeyInput {
+    flex: 1; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 12px; color: var(--text);
+    font-size: 13px; font-family: monospace;
+  }
+  #apiKeyInput:focus { outline: none; border-color: var(--blue); }
+  #saveApiBtn {
+    background: var(--blue); border: none; color: white;
+    border-radius: 6px; padding: 8px 18px; cursor: pointer;
+    font-size: 13px; font-weight: 600; white-space: nowrap;
+  }
+  #saveApiBtn:hover { background: #2d7dd2; }
+  .api-status { font-size: 12px; margin-top: 8px; }
+
+  /* ── Main ── */
+  main { flex: 1; padding: 24px; max-width: 1000px; width: 100%; margin: 0 auto; }
+
+  /* ── Platform Input ── */
+  .input-section { margin-bottom: 20px; }
+  .input-section label {
+    display: block; font-size: 13px; font-weight: 600;
+    color: var(--muted); margin-bottom: 8px; text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+  .input-row { display: flex; gap: 10px; }
+  #platformInput {
+    flex: 1; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 11px 16px; color: var(--text);
+    font-size: 15px;
+  }
+  #platformInput:focus { outline: none; border-color: var(--blue); }
+  #platformInput::placeholder { color: var(--muted); }
+  #generateBtn {
+    background: var(--blue); border: none; color: white;
+    border-radius: 8px; padding: 11px 28px; cursor: pointer;
+    font-size: 15px; font-weight: 700; white-space: nowrap;
+    transition: background .15s;
+  }
+  #generateBtn:hover:not(:disabled) { background: #2d7dd2; }
+  #generateBtn:disabled { opacity: .5; cursor: not-allowed; }
+
+  /* ── Quick Pick ── */
+  .quick-label {
+    font-size: 11px; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px;
+  }
+  .quick-grid {
+    display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 22px;
+  }
+  .qbtn {
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--text); border-radius: 6px; padding: 5px 13px;
+    font-size: 12px; cursor: pointer; transition: all .15s;
+  }
+  .qbtn:hover { border-color: var(--blue); background: var(--blue-dim); }
+
+  /* ── Status Bar ── */
+  #statusBar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 14px; border-radius: 6px;
+    background: var(--surface); border: 1px solid var(--border);
+    font-size: 13px; margin-bottom: 14px;
+    min-height: 38px;
+  }
+  #statusBar.hidden { display: none; }
+  .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--muted); flex-shrink: 0;
+  }
+  .dot.generating { background: var(--blue); animation: pulse 1s ease-in-out infinite; }
+  .dot.done       { background: var(--green); }
+  .dot.error      { background: var(--red); }
+  @keyframes pulse {
+    0%,100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: .5; transform: scale(1.4); }
+  }
+
+  /* ── Toolbar ── */
+  #toolbar {
+    display: flex; gap: 8px; margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  #toolbar.hidden { display: none; }
+  .tbtn {
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--text); border-radius: 6px; padding: 6px 14px;
+    font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px;
+  }
+  .tbtn:hover { border-color: var(--blue); }
+  .tbtn.success { border-color: var(--green); color: var(--green); }
+
+  /* ── Output ── */
+  #outputWrap {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; overflow: hidden;
+  }
+  #outputWrap.hidden { display: none; }
+  #output {
+    white-space: pre-wrap; font-family: 'Courier New', monospace;
+    font-size: 13px; line-height: 1.65; padding: 20px 24px;
+    color: var(--text); min-height: 200px;
+    max-height: 70vh; overflow-y: auto;
+  }
+  .warn-line      { color: var(--amber); font-style: italic; }
+  .section-header { color: #79c0ff; font-weight: bold; }
+  .item-header    { color: #d2a8ff; font-weight: bold; }
+  .checkbox-line  { color: #e6edf3; padding-left: 4px; }
+  .bullet-line    { color: #e6edf3; }
+
+  /* ── Footer ── */
+  footer {
+    text-align: center; padding: 14px;
+    font-size: 11px; color: var(--muted);
+    border-top: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<header>
+  <div class="badge">⚖️</div>
+  <div>
+    <h1>PPD Homicide Bureau — Search Warrant Generator</h1>
+    <p>Phoenix Police Department · Digital Evidence Unit · Gold Standard Format</p>
+  </div>
+  <div class="header-right">
+    <button id="settingsBtn" onclick="toggleApiPanel()">⚙ API Key</button>
+  </div>
+</header>
+
+<!-- ── API KEY PANEL ── -->
+<div id="apiPanel">
+  <h3>🔑 One-Time Setup — Enter Your Anthropic API Key</h3>
+  <p>
+    You only need to do this once. Your key is saved in this browser and will be there next time.<br>
+    To get a key: go to <strong>console.anthropic.com</strong> → Sign in → API Keys → Create Key.
+  </p>
+  <div class="api-row">
+    <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-..." spellcheck="false"/>
+    <button id="saveApiBtn" onclick="saveApiKey()">Save Key</button>
+  </div>
+  <div class="api-status" id="apiStatus"></div>
+</div>
+
+<!-- ── MAIN ── -->
+<main>
+
+  <!-- Platform Input -->
+  <div class="input-section">
+    <label>Platform or Company Name</label>
+    <div class="input-row">
+      <input type="text" id="platformInput"
+        placeholder="e.g.  Snapchat · Comcast · Wells Fargo · DoorDash · Blink · Ring · TikTok"
+        autocomplete="off" spellcheck="false"
+        onkeydown="if(event.key==='Enter') generate()"/>
+      <button id="generateBtn" onclick="generate()">⚡ Generate</button>
+    </div>
+  </div>
+
+  <!-- Quick Pick -->
+  <div class="quick-label">Quick Pick</div>
+  <div class="quick-grid" id="quickGrid"></div>
+
+  <!-- Status -->
+  <div id="statusBar" class="hidden">
+    <div class="dot" id="statusDot"></div>
+    <span id="statusText"></span>
+  </div>
+
+  <!-- Toolbar -->
+  <div id="toolbar" class="hidden">
+    <button class="tbtn" id="copyBtn"    onclick="copyAll()">📋 Copy All</button>
+    <button class="tbtn" id="docxBtn"    onclick="downloadDocx()">📄 Download Word Doc</button>
+    <button class="tbtn" id="clearBtn"   onclick="clearOutput()">✕ Clear</button>
+  </div>
+
+  <!-- Output -->
+  <div id="outputWrap" class="hidden">
+    <div id="output"></div>
+  </div>
+
+</main>
+
+<footer>PPD Homicide Bureau · Search Warrant Content Generator · For authorized law enforcement use only</footer>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// QUICK PICK BUTTONS
+// ─────────────────────────────────────────────────────────────────────────────
+const QUICK_PICKS = [
+  'Apple / iCloud','Snapchat','Google / Gmail','Facebook','Instagram',
+  'WhatsApp','T-Mobile','Verizon','AT&T','Cricket Wireless',
+  'Uber','Lyft','Cash App','Venmo','TikTok',
+  'Twitter / X','Discord','Amazon','DoorDash','Comcast / Xfinity',
+  'Blink','Ring','Coinbase','Zelle','PayPal',
+  'Signal','Telegram','Microsoft','LinkedIn','Airbnb'
+];
+
+(function buildQuickPicks() {
+  const grid = document.getElementById('quickGrid');
+  QUICK_PICKS.forEach(p => {
+    const b = document.createElement('button');
+    b.className = 'qbtn';
+    b.textContent = p;
+    b.onclick = () => {
+      document.getElementById('platformInput').value = p;
+      generate();
+    };
+    grid.appendChild(b);
+  });
+})();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PLATFORM HINTS  (verified service addresses / contact info per platform)
+// ─────────────────────────────────────────────────────────────────────────────
+const PLATFORM_HINTS = [
+  { keys:['apple','icloud'], info:`Legal Entity: Apple Inc.\nService Address: Apple Inc., Attn: Law Enforcement Compliance, One Apple Park Way, Cupertino, CA 95014\nPortal: https://www.apple.com/legal/privacy/law-enforcement-guidelines-us.pdf\nEmail: le_team@apple.com\nPreferred Method: Apple Law Enforcement Compliance portal\nRecords Available: iCloud account data, device backups, email, calendar, contacts, photos, iCloud Drive, FaceTime logs, iMessage metadata, App Store records, Apple Pay transaction records, location data` },
+  { keys:['snapchat','snap inc'], info:`Legal Entity: Snap Inc.\nService Address: Snap Inc., Attn: Law Enforcement, 3000 31st Street, Santa Monica, CA 90405\nPortal: https://www.snap.com/en-US/safety/safety-enforcement\nEmail: lawenforcement@snap.com\nPreferred Method: Snap Law Enforcement portal\nRecords Available: Account registration, subscriber info, IP logs, device identifiers, Snap Map location history, story and message metadata (not content unless stored), saved snaps/chats` },
+  { keys:['google','gmail','youtube'], info:`Legal Entity: Google LLC (Alphabet Inc.)\nService Address: Google LLC, Attn: Legal Investigations Support, 1600 Amphitheatre Pkwy, Mountain View, CA 94043\nPortal: https://support.google.com/legal/contact/lr_legalother (Google LERS)\nPreferred Method: Google Law Enforcement Request System (LERS) at google.com/contact/le\nRecords Available: Gmail content and metadata, Google Drive files, Google Maps location history, Search history, YouTube account/watch history, Google Pay records, Android device data, Google Voice, IP and device logs` },
+  { keys:['facebook','meta','instagram','whatsapp','threads'], info:`Legal Entity: Meta Platforms, Inc.\nService Address: Meta Platforms, Inc., Attn: Law Enforcement Response Team, 1601 Willow Rd, Menlo Park, CA 94025\nPortal: https://www.facebook.com/records\nPreferred Method: Facebook Law Enforcement Online Request System at facebook.com/records\nRecords Available: Account registration and subscriber info, IP logs, Facebook Messenger content, Instagram account data and messages, WhatsApp metadata (end-to-end encrypted — content not available), Threads account data, device identifiers` },
+  { keys:['t-mobile','tmobile'], info:`Legal Entity: T-Mobile USA, Inc.\nService Address: T-Mobile Subpoena Compliance, 4 Sylvan Way, Parsippany, NJ 07054\nFax: 973-292-8697\nEmail: lawenforcement@t-mobile.com\nLE Hotline: 1-800-927-2199\nRecords Available: Subscriber info, call detail records (CDRs), cell site/tower data (CSLI), SMS/MMS records, IMEI/IMSI, IP records, real-time location (with appropriate legal process)` },
+  { keys:['verizon'], info:`Legal Entity: Verizon Communications Inc.\nService Address: Verizon Law Enforcement Resource Team, 180 Washington Valley Rd, Bedminster, NJ 07921\nLE Hotline: 1-888-483-2600 (24/7)\nEmail: leresponse@verizon.com\nRecords Available: Subscriber info, CDRs, cell site/tower data (CSLI), SMS content, IMEI/IMSI, real-time location, IP records, account history` },
+  { keys:['at&t','att'], info:`Legal Entity: AT&T Inc.\nService Address: AT&T Law Enforcement Response Team (LERT), 11760 US Highway 1, Suite 300, Palm Beach Gardens, FL 33408\nLE Hotline: 1-800-291-4952 (24/7)\nEmail: att.legalsupport@att.com\nRecords Available: Subscriber info, CDRs, cell site/tower data (CSLI), SMS/MMS content, IMEI/IMSI, IP records, real-time location` },
+  { keys:['cricket'], info:`Legal Entity: Cricket Wireless (AT&T subsidiary)\nService Address: AT&T Law Enforcement Response Team (LERT), 11760 US Highway 1, Suite 300, Palm Beach Gardens, FL 33408\nLE Hotline: 1-800-291-4952\nNote: Cricket is an AT&T subsidiary — process through AT&T LERT\nRecords Available: Subscriber info, CDRs, tower/CSLI data, SMS records, IMEI` },
+  { keys:['boost'], info:`Legal Entity: Boost Mobile (Dish Wireless LLC)\nService Address: Dish Wireless Law Enforcement Compliance, 9601 S Meridian Blvd, Englewood, CO 80112\nPhone: 1-888-788-4727\nRecords Available: Subscriber info, CDRs, CSLI, SMS records, IMEI` },
+  { keys:['sprint'], info:`Legal Entity: Sprint (now T-Mobile USA, Inc. — merged 2020)\nService Address: T-Mobile Subpoena Compliance, 4 Sylvan Way, Parsippany, NJ 07054\nLE Hotline: 1-800-927-2199\nNote: Sprint accounts are now serviced through T-Mobile's law enforcement process` },
+  { keys:['cash app','cashapp'], info:`Legal Entity: Block, Inc. (formerly Square, Inc.)\nService Address: Block, Inc., Attn: Legal Process, 1955 Broadway, Suite 600, Oakland, CA 94612\nEmail: legal@squareup.com\nPortal: https://squareup.com/us/en/legal/general/le\nRecords Available: Account registration, linked bank accounts, transaction history, $Cashtag, device info, IP logs, Bitcoin wallet data` },
+  { keys:['venmo'], info:`Legal Entity: Venmo (PayPal, Inc.)\nService Address: PayPal, Inc., Attn: Law Enforcement Response Team, 2211 North First Street, San Jose, CA 95131\nEmail: compliance@paypal.com\nPhone: 1-888-221-1161\nRecords Available: Account info, transaction records including sender/recipient, linked bank/card data, IP logs, device identifiers` },
+  { keys:['paypal'], info:`Legal Entity: PayPal, Inc.\nService Address: PayPal, Inc., Attn: Law Enforcement Response Team, 2211 North First Street, San Jose, CA 95131\nEmail: compliance@paypal.com\nPhone: 1-888-221-1161\nRecords Available: Account registration, transaction history, linked financial instruments, IP and device logs` },
+  { keys:['tiktok'], info:`Legal Entity: TikTok Inc. (ByteDance Ltd.)\nService Address: TikTok Inc., Attn: Law Enforcement, 5800 Bristol Parkway, Suite 100, Culver City, CA 90230\nPortal: https://www.tiktok.com/legal/report/law-enforcement\nEmail: lawenforcement@tiktok.com\nRecords Available: Account registration, device identifiers, IP logs, video content and metadata, direct messages, location data` },
+  { keys:['twitter','x.com','x '], info:`Legal Entity: X Corp. (formerly Twitter, Inc.)\nService Address: X Corp., Attn: Legal Policy, 1355 Market Street, Suite 900, San Francisco, CA 94103\nPortal: https://help.twitter.com/forms/lawenforcement\nEmail: lawenforcement@twitter.com\nRecords Available: Account registration, IP logs, device identifiers, tweet/post history, direct messages, account activity` },
+  { keys:['discord'], info:`Legal Entity: Discord Inc.\nService Address: Discord Inc., Attn: Law Enforcement, 444 De Haro Street, Suite 200, San Francisco, CA 94107\nEmail: lawenforcement@discord.com\nPortal: https://discord.com/safety\nRecords Available: Account registration, IP logs, device info, message content, server membership, friend lists` },
+  { keys:['amazon'], info:`Legal Entity: Amazon.com, Inc.\nService Address: Amazon.com, Inc., Attn: Legal Department — Law Enforcement Response Team, P.O. Box 81226, Seattle, WA 98108\nPortal: https://www.amazon.com/gp/help/customer/display.html?nodeId=468496\nEmail: amazon-legal-le@amazon.com\nRecords Available: Account info, order history, shipping addresses, payment info, device data (Echo/Alexa), IP records, Ring/Blink data (separate process available)` },
+  { keys:['airbnb'], info:`Legal Entity: Airbnb, Inc.\nService Address: Airbnb, Inc., Attn: Trust & Safety, 888 Brannan Street, San Francisco, CA 94103\nEmail: lawenforcement@airbnb.com\nRecords Available: Account info, booking history, host/guest communications, payment records, listing data, IP logs` },
+  { keys:['doordash'], info:`Legal Entity: DoorDash, Inc.\nService Address: DoorDash, Inc., Attn: Legal Process, 303 2nd Street, Suite 800, San Francisco, CA 94107\nEmail: lawenforcement@doordash.com\nRecords Available: Account info, order history, delivery addresses, payment records, driver GPS data, IP logs, device identifiers` },
+  { keys:['grubhub'], info:`Legal Entity: Grubhub Inc.\nService Address: Grubhub Inc., Attn: Legal Department, 111 W. Washington St., Suite 2100, Chicago, IL 60602\nEmail: legal@grubhub.com\nRecords Available: Account info, order history, delivery addresses, payment records, IP logs` },
+  { keys:['linkedin'], info:`Legal Entity: LinkedIn Corporation (Microsoft)\nService Address: LinkedIn Corporation, Attn: Legal Department, 1000 West Maude Avenue, Sunnyvale, CA 94085\nEmail: lawenforcement@linkedin.com\nRecords Available: Account registration, IP logs, connection data, messages, profile activity, device identifiers` },
+  { keys:['telegram'], info:`Legal Entity: Telegram Messenger Inc.\nEmail: abuse@telegram.org\nNote: Telegram generally only discloses IP and phone number for active terrorism investigations confirmed by court order. End-to-end encrypted Secret Chats are not available. Standard chats are stored on Telegram servers.\n⚠️ Verify current process at search.org — Telegram has limited law enforcement cooperation` },
+  { keys:['signal'], info:`Legal Entity: Signal Messenger LLC\nService Address: Signal Foundation, 650 Castro Street, Suite 120-223, Mountain View, CA 94041\nEmail: legal@signal.org\nNote: Signal retains minimal data. Available records are limited to: account registration date and last connection date. Message content is end-to-end encrypted and NOT available to Signal.` },
+  { keys:['microsoft','outlook','hotmail','xbox'], info:`Legal Entity: Microsoft Corporation\nService Address: Microsoft Corporation, Attn: Online Services Law Enforcement Response Team, One Microsoft Way, Redmond, WA 98052\nPortal: https://www.microsoft.com/en-us/about/legal/intellectualproperty/le-us.aspx\nEmail: mslet@microsoft.com\nRecords Available: Account registration, OneDrive files, Outlook/Hotmail email content, IP logs, Xbox/gaming data, Microsoft Teams data, device data` },
+  { keys:['comcast','xfinity'], info:`Legal Entity: Comcast Cable Communications, LLC\nService Address: Comcast Subpoena Compliance, 650 Centerton Rd, Moorestown, NJ 08057\nPhone: 1-866-947-4468\nEmail: law_enforcement@cable.comcast.com\nRecords Available: Subscriber info, IP address assignments and history, internet usage records, account history` },
+  { keys:['spectrum','charter'], info:`Legal Entity: Charter Communications (Spectrum)\nService Address: Charter Law Enforcement Compliance, 400 Atlantic Street, Stamford, CT 06901\nPhone: 1-888-438-2427\nRecords Available: Subscriber info, IP records, cable/internet service history` },
+  { keys:['blink'], info:`Legal Entity: Blink (Amazon subsidiary)\nService Address: Amazon.com, Inc., Attn: Legal Department — Law Enforcement Response Team, P.O. Box 81226, Seattle, WA 98108\nEmail: amazon-legal-le@amazon.com\nNote: Blink is an Amazon company — process through Amazon LERT\nRecords Available: Account registration, device registration, motion event logs, video clips stored in Blink cloud, IP records` },
+  { keys:['ring'], info:`Legal Entity: Ring LLC (Amazon subsidiary)\nService Address: Amazon.com, Inc., Attn: Legal Department — Law Enforcement Response Team, P.O. Box 81226, Seattle, WA 98108\nEmail: amazon-legal-le@amazon.com\nPortal: https://law.ring.com (Ring Law Enforcement Portal)\nRecords Available: Account info, device registration, event history, video footage stored in Ring cloud, Neighbors activity, IP records` },
+  { keys:['nest','google nest'], info:`Legal Entity: Google Nest (Google LLC)\nService Address: Google LLC, Attn: Legal Investigations Support, 1600 Amphitheatre Pkwy, Mountain View, CA 94043\nPortal: google.com/contact/le\nRecords Available: Account info, device data, camera footage stored in Google cloud, activity logs, IP records — processed through Google LERS` },
+  { keys:['wyze'], info:`Legal Entity: Wyze Labs, Inc.\nService Address: Wyze Labs, Inc., Attn: Legal, 12720 Gateway Drive South, Suite 400, Seattle, WA 98168\nEmail: support@wyze.com (note LE in subject)\nRecords Available: Account registration, device logs, camera event history, video stored in Wyze cloud, IP records` },
+  { keys:['zelle'], info:`Legal Entity: Zelle (Early Warning Services, LLC)\nService Address: Early Warning Services, LLC, Attn: Legal Process, 16552 N 90th Street, Scottsdale, AZ 85260\nPhone: 1-800-656-4311\nEmail: legalprocess@earlywarning.com\nRecords Available: Account registration, transaction records, linked bank accounts (note: primary bank may have separate records)` },
+  { keys:['coinbase'], info:`Legal Entity: Coinbase Global, Inc.\nService Address: Coinbase Global, Inc., Attn: Law Enforcement, 248 3rd St., #434, Oakland, CA 94607\nPortal: https://www.coinbase.com/legal/user_data_request_faq\nEmail: lawenforcement@coinbase.com\nRecords Available: Account registration (KYC data), transaction history, wallet addresses, IP logs, device identifiers, linked bank accounts` },
+  { keys:['pinterest'], info:`Legal Entity: Pinterest, Inc.\nService Address: Pinterest, Inc., Attn: Legal Team, 505 Brannan Street, San Francisco, CA 94107\nEmail: legal@pinterest.com\nRecords Available: Account registration, IP logs, device identifiers, pin/board history, search activity` },
+  { keys:['uber'], info:`Legal Entity: Uber Technologies, Inc.\nService Address: Uber Technologies, Inc., Attn: Law Enforcement Response Team, 1515 3rd Street, San Francisco, CA 94158\nPortal: https://law-enforcement.uber.com (preferred method)\nRecords Available: Account info, trip history with GPS breadcrumb trails, pickup/drop-off coordinates, driver and rider information, in-app communications, payment records, device identifiers, login/IP logs` },
+  { keys:['lyft'], info:`Legal Entity: Lyft, Inc.\nService Address: Lyft, Inc., Attn: Law Enforcement, 185 Berry Street, Suite 5000, San Francisco, CA 94107\nPortal: https://help.lyft.com/hc/en-us/articles/115013791448\nEmail: law-enforcement@lyft.com\nRecords Available: Account info, ride history with GPS route data, driver and rider information, in-app communications, payment records, device identifiers, IP logs` },
+];
+
+function getPlatformContext(platform) {
+  const lower = platform.toLowerCase();
+  for (const entry of PLATFORM_HINTS) {
+    if (entry.keys.some(k => lower.includes(k))) return entry.info;
+  }
+  return null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SYSTEM PROMPT — Gold Standard Format
+// ─────────────────────────────────────────────────────────────────────────────
+const SYSTEM_PROMPT = `You are a search warrant language generator for the Phoenix Police Department Homicide Bureau. You produce complete, court-ready search warrant affidavits formatted for submission through the Maricopa County electronic search warrant portal.
+
+CRITICAL RULES — READ BEFORE GENERATING:
+
+1. DO NOT include any of the following — they are already pre-populated in the Maricopa County e-warrant portal:
+   - Document header block (title bar, county/state header, SW#, DR#, callback number)
+   - "AFFIDAVIT FOR SEARCH WARRANT" title line
+   - "State of Arizona, County of Maricopa" header
+   - Opening probable cause statutory language ("THAT THE AFFIANT has probable cause to believe...")
+   - Grounds checkboxes / statutory authorization section
+   - PRAYER or WHEREFORE clause
+   - Affiant signature block, badge number, badge oath, or notary section
+   - Judge signature block
+
+2. DO NOT include any affiant-specific personal details: no "I am assigned to...", no hire date, no years of experience, no unit/detail. Keep all affiant references generic ("Your affiant").
+
+3. START the document directly with the platform title line, then immediately TO: section.
+
+OUTPUT FORMAT — Follow this structure exactly, in this order:
+
+[PLATFORM NAME IN ALL CAPS] SEARCH WARRANT
+
+TO:
+
+Custodian of Records
+[Company Legal Name]
+[Department, e.g., Law Enforcement Response Team]
+[Street Address]
+[City, State ZIP]
+
+SERVICE METHOD:
+
+Physical Service Address:
+[Company Legal Name]
+[Department]
+[Street Address]
+[City, State ZIP]
+
+Law Enforcement Portal (Preferred):
+[Portal name]
+[Portal URL]
+
+Email:
+[Email address or note about preferred portal method]
+
+AFFIDAVIT:
+
+Your affiant is a sworn peace officer employed by a law enforcement agency and is currently engaged in the investigation of felony criminal offenses. Your affiant has training and experience in criminal investigations, digital evidence preservation, cellular and geolocation investigations, and the preparation and execution of search warrants involving electronically stored information and third-party business records.
+
+[Write 3–5 paragraphs, each starting with "Your affiant knows through training and experience that..." or similar, explaining: (1) what the platform is and how it operates; (2) what kinds of records the platform collects and stores; (3) why those records generate digital evidence relevant to criminal investigations; (4) why there is probable cause to believe the records constitute evidence. Be specific to the actual platform. Write in formal legal language.]
+
+DATE RANGE:
+
+START DATE:  [Insert Start Date]
+END DATE:    [Insert End Date]
+
+ALL records within this date range shall be produced. Additionally, where applicable, records shall be produced from account creation to present.
+
+IDENTIFIERS:
+
+The account(s), person(s), or data to be searched include but are not limited to:
+
+   • [Identifier Type]: [Insert Value]
+   • [Identifier Type]: [Insert Value]
+   [List all platform-specific identifier types — e.g., Account ID, Email Address, Phone Number, Username, Device Identifier, IMEI, $Cashtag, IP Address, etc.]
+
+PROBABLE CAUSE:
+
+[Write 3–4 paragraphs of platform-specific probable cause boilerplate: (1) why the suspect likely used this platform in connection with the offense; (2) how investigators know suspects use this type of platform to commit or facilitate crimes; (3) what specific evidentiary value the platform's records have; (4) closing probable cause statement. Write in formal legal language, past tense, third person ("Your affiant").]
+
+[PROBABLE CAUSE NARRATIVE — TO BE COMPLETED BY AFFIANT]
+
+ITEMS TO BE PRODUCED:
+
+Pursuant to this warrant, [Company Name] is ordered to produce all of the following records, to the extent they exist and are within [Company Name]'s possession, custody, or control:
+
+1. [CATEGORY TITLE IN ALL CAPS]
+
+   ☐ [Individual item — one per line]
+   ☐ [Individual item — one per line]
+   ☐ [Individual item — one per line]
+
+2. [NEXT CATEGORY IN ALL CAPS]
+
+   ☐ [Individual item]
+   ☐ [Individual item]
+
+[Continue for all relevant categories. NEVER collapse multiple items into a single dense paragraph. Every single item must be its own separate line beginning with ☐. Include these standard categories where applicable: SUBSCRIBER AND ACCOUNT INFORMATION, DEVICE AND LOGIN RECORDS, COMMUNICATIONS CONTENT, LOCATION DATA, PAYMENT AND FINANCIAL RECORDS, MEDIA AND CONTENT, ACCOUNT ACTIVITY LOGS, UNKNOWN ACCOUNT IDENTIFICATION, DATA PRESERVATION. Tailor categories to the specific platform.]
+
+RETURN FORMAT:
+
+All records shall be produced in native digital format whenever possible.
+
+Preferred production format includes:
+
+   • PDF for subscriber/business records
+   • CSV/XLSX/JSON for data exports and logs
+   • Native image/media format for photographs or uploaded content
+   • Metadata-inclusive export where available
+   • All timestamps shall include time zone information
+
+NON-DISCLOSURE:
+
+[Company Name], its employees, agents, contractors, and representatives are hereby ordered not to disclose the existence of this warrant, the records requested, or the fact that records were provided in response to this warrant to the account holder, subscriber, or any other unauthorized party. Such disclosure may seriously jeopardize an ongoing criminal investigation by creating risk of destruction of evidence, witness intimidation, flight from prosecution, or other obstruction of justice.
+
+END OF WARRANT
+
+FORMATTING RULES:
+- Replace [Company Name] with the correct legal entity name throughout
+- Use verified service address/contact info from the VERIFIED SERVICE INFORMATION if provided
+- If service info is NOT verified, mark uncertain fields with ⚠️ and note: "Verify current address at search.org before service"
+- All [Insert Value] fields remain as-is for the detective to complete
+- Every ☐ item must be on its own separate line — never combine into dense paragraphs
+- ITEMS TO BE PRODUCED categories: numbered headers in ALL CAPS, each item on its own ☐ line
+- Write in formal legal language appropriate for Maricopa County Superior Court`;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// API KEY MANAGEMENT
+// ─────────────────────────────────────────────────────────────────────────────
+function loadApiKey() {
+  return localStorage.getItem('ppd_api_key') || '';
+}
+function saveApiKey() {
+  const val = document.getElementById('apiKeyInput').value.trim();
+  if (!val || !val.startsWith('sk-ant')) {
+    document.getElementById('apiStatus').innerHTML = '<span style="color:var(--red)">❌ That doesn\'t look like a valid Anthropic key. Keys start with sk-ant-</span>';
+    return;
+  }
+  localStorage.setItem('ppd_api_key', val);
+  document.getElementById('apiStatus').innerHTML = '<span style="color:var(--green)">✅ Key saved! You can close this panel.</span>';
+  document.getElementById('apiKeyInput').value = '••••••••••••' + val.slice(-4);
+  setTimeout(() => { document.getElementById('apiPanel').classList.add('hidden'); }, 1800);
+}
+function toggleApiPanel() {
+  const p = document.getElementById('apiPanel');
+  p.classList.toggle('hidden');
+  if (!p.classList.contains('hidden')) {
+    const stored = loadApiKey();
+    document.getElementById('apiKeyInput').value = stored ? '••••••••••••' + stored.slice(-4) : '';
+    document.getElementById('apiKeyInput').placeholder = stored ? 'Key is saved — enter new key to replace' : 'sk-ant-api03-...';
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ON LOAD — show API panel if no key saved
+// ─────────────────────────────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  if (!loadApiKey()) {
+    document.getElementById('apiPanel').classList.remove('hidden');
+  } else {
+    document.getElementById('apiPanel').classList.add('hidden');
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GENERATE
+// ─────────────────────────────────────────────────────────────────────────────
+let currentText = '';
+let generating  = false;
+
+async function generate() {
+  if (generating) return;
+
+  const apiKey   = loadApiKey();
+  const platform = document.getElementById('platformInput').value.trim();
+
+  if (!apiKey) {
+    setStatus('error', '🔑 No API key saved. Click ⚙ API Key in the top right to set it up.');
+    return;
+  }
+  if (!platform) {
+    document.getElementById('platformInput').focus();
+    return;
+  }
+
+  generating  = true;
+  currentText = '';
+
+  const context = getPlatformContext(platform);
+  let userMsg   = `Generate a complete search warrant for: ${platform}\n\n`;
+  if (context) {
+    userMsg += `VERIFIED SERVICE INFORMATION (use exactly as provided for the TO: and SERVICE METHOD: sections):\n${context}\n\n`;
+    userMsg += `Generate the complete warrant now following the required format exactly.`;
+  } else {
+    userMsg += `This platform may not be in the verified database. Use your best available knowledge about this company's law enforcement records process. If the service address or contact info is uncertain, mark it with ⚠️ and add a note to verify at search.org.\n\nGenerate the complete warrant now following the required format exactly.`;
+  }
+
+  // UI reset
+  document.getElementById('generateBtn').disabled = true;
+  document.getElementById('outputWrap').classList.remove('hidden');
+  document.getElementById('toolbar').classList.add('hidden');
+  document.getElementById('output').textContent = '';
+  setStatus('generating', `Generating warrant for ${platform}...`);
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key':         apiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type':      'application/json',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model:      'claude-opus-4-6',
+        max_tokens: 8000,
+        stream:     true,
+        system:     SYSTEM_PROMPT,
+        messages:   [{ role: 'user', content: userMsg }],
+      }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ error: { message: resp.statusText } }));
+      throw new Error(err.error?.message || resp.statusText);
+    }
+
+    const reader  = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let   buf     = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        const t = line.trim();
+        if (!t.startsWith('data: ')) continue;
+        const json = t.slice(6);
+        if (json === '[DONE]') continue;
+        try {
+          const evt = JSON.parse(json);
+          if (evt.type === 'content_block_delta' && evt.delta?.text) {
+            currentText += evt.delta.text;
+            renderOutput(currentText);
+          }
+        } catch (_) {}
+      }
+    }
+
+    setStatus('done', `✅ Warrant generated for ${platform} — ready to copy/paste or download`);
+    document.getElementById('toolbar').classList.remove('hidden');
+
+  } catch (err) {
+    setStatus('error', `❌ Error: ${err.message}`);
+    console.error(err);
+  } finally {
+    generating = false;
+    document.getElementById('generateBtn').disabled = false;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RENDER OUTPUT  (syntax highlighting in the preview panel)
+// ─────────────────────────────────────────────────────────────────────────────
+function renderOutput(text) {
+  const out = document.getElementById('output');
+  out.innerHTML = '';
+
+  const SECTION_HEADERS = /^(TO:|SERVICE METHOD:|AFFIDAVIT:|DATE RANGE:|IDENTIFIERS:|PROBABLE CAUSE:|ITEMS TO BE PRODUCED:|RETURN FORMAT:|NON-DISCLOSURE:|END OF WARRANT)/;
+  const SUBSECTION      = /^(Physical Service Address:|Law Enforcement Portal|Email:)/;
+  const NUMBERED_ITEM   = /^\d+\.\s+[A-Z][A-Z\s\-—–]+$/;
+
+  text.split('\n').forEach(line => {
+    const trimmed = line.trim();
+    const span = document.createElement('span');
+
+    if (trimmed.includes('⚠️')) {
+      span.className = 'warn-line';
+    } else if (SECTION_HEADERS.test(trimmed) || /SEARCH WARRANT$/.test(trimmed)) {
+      span.className = 'section-header';
+    } else if (SUBSECTION.test(trimmed)) {
+      span.className = 'item-header';
+    } else if (NUMBERED_ITEM.test(trimmed)) {
+      span.className = 'item-header';
+    } else if (/^\u2610\s/.test(trimmed) || /^☐\s/.test(trimmed)) {
+      // Checkbox items
+      span.className = 'checkbox-line';
+    } else if (/^\u2022\s/.test(trimmed) || /^•\s/.test(trimmed)) {
+      span.className = 'bullet-line';
+    }
+
+    span.textContent = line + '\n';
+    out.appendChild(span);
+  });
+
+  out.scrollTop = out.scrollHeight;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATUS
+// ─────────────────────────────────────────────────────────────────────────────
+function setStatus(state, msg) {
+  const bar  = document.getElementById('statusBar');
+  const dot  = document.getElementById('statusDot');
+  const text = document.getElementById('statusText');
+  bar.classList.remove('hidden');
+  dot.className = 'dot ' + state;
+  text.textContent = msg;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COPY ALL
+// ─────────────────────────────────────────────────────────────────────────────
+async function copyAll() {
+  if (!currentText) return;
+  try {
+    await navigator.clipboard.writeText(currentText);
+    const btn = document.getElementById('copyBtn');
+    btn.textContent = '✅ Copied!';
+    btn.classList.add('success');
+    setTimeout(() => { btn.textContent = '📋 Copy All'; btn.classList.remove('success'); }, 2000);
+  } catch(_) {
+    const ta = document.createElement('textarea');
+    ta.value = currentText;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CLEAR
+// ─────────────────────────────────────────────────────────────────────────────
+function clearOutput() {
+  currentText = '';
+  document.getElementById('output').textContent = '';
+  document.getElementById('outputWrap').classList.add('hidden');
+  document.getElementById('toolbar').classList.add('hidden');
+  document.getElementById('statusBar').classList.add('hidden');
+  document.getElementById('platformInput').value = '';
+  document.getElementById('platformInput').focus();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DOWNLOAD WORD DOC — No external library required
+// Uses Word HTML format: 100% self-contained, no CDN, no internet needed.
+// Produces a .doc file that Word opens natively with full formatting.
+// ─────────────────────────────────────────────────────────────────────────────
+function downloadDocx() {
+  if (!currentText) return;
+
+  const platform = document.getElementById('platformInput').value.trim() || 'UNKNOWN';
+  const today    = new Date();
+  const dateStr  = `${today.getFullYear()}${String(today.getMonth()+1).padStart(2,'0')}${String(today.getDate()).padStart(2,'0')}`;
+  const safeName = platform.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+  const filename = `SW_${safeName}_${dateStr}.doc`;
+
+  // ── HTML escape helper ────────────────────────────────────────────────────
+  function esc(t) {
+    return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── Line → HTML row ───────────────────────────────────────────────────────
+  const SECTION_RE = /^(TO:|SERVICE METHOD:|AFFIDAVIT:|DATE RANGE:|IDENTIFIERS:|PROBABLE CAUSE:|ITEMS TO BE PRODUCED:|RETURN FORMAT:|NON-DISCLOSURE:|END OF WARRANT)/;
+  const SUBSEC_RE  = /^(Physical Service Address:|Law Enforcement Portal|Email:|Fax:|LE Hotline:|Phone:|Portal:|Note:)/;
+
+  function lineToHtml(line) {
+    const t = line.trim();
+    if (!t) return '<p style="margin:0;line-height:1.2em;">&nbsp;</p>';
+
+    // Warning / unverified
+    if (t.includes('⚠️')) {
+      return `<p style="font-family:Arial;font-size:11pt;color:#cc8800;font-style:italic;margin:4pt 0;">${esc(t)}</p>`;
+    }
+    // Title line (SEARCH WARRANT for XYZ)
+    if (/SEARCH WARRANT/.test(t) && t.length < 80 && !SECTION_RE.test(t)) {
+      return `<p style="font-family:Arial;font-size:16pt;font-weight:bold;text-align:center;margin:0 0 14pt 0;">${esc(t)}</p>`;
+    }
+    // Major section header
+    if (SECTION_RE.test(t)) {
+      const rule = t === 'END OF WARRANT'
+        ? `<p style="font-family:Arial;font-size:11pt;font-weight:bold;text-align:center;border-top:1pt solid #999;margin:14pt 0 0 0;padding-top:6pt;">${esc(t)}</p>`
+        : `<p style="font-family:Arial;font-size:13pt;font-weight:bold;border-top:1pt solid #999;margin:14pt 0 4pt 0;padding-top:6pt;">${esc(t)}</p>`;
+      return rule;
+    }
+    // Sub-section label
+    if (SUBSEC_RE.test(t)) {
+      return `<p style="font-family:Arial;font-size:11pt;font-weight:bold;margin:6pt 0 2pt 0;">${esc(t)}</p>`;
+    }
+    // Numbered item category header
+    if (/^\d+\.\s+[A-Z]/.test(t)) {
+      return `<p style="font-family:Arial;font-size:11pt;font-weight:bold;margin:10pt 0 4pt 0;">${esc(t)}</p>`;
+    }
+    // Checkbox items ☐
+    if (/^[\u2610\u2611☐]\s/.test(t)) {
+      const body = esc(t.replace(/^[\u2610\u2611☐]\s+/,''));
+      return `<p style="font-family:Arial;font-size:11pt;margin:2pt 0 2pt 24pt;">&#9744;&nbsp;&nbsp;${body}</p>`;
+    }
+    // Bullet items •
+    if (/^[\u2022•]\s/.test(t)) {
+      const body = esc(t.replace(/^[\u2022•]\s+/,''));
+      return `<p style="font-family:Arial;font-size:11pt;margin:2pt 0 2pt 24pt;">&bull;&nbsp;&nbsp;${body}</p>`;
+    }
+    // Placeholder text [PROBABLE CAUSE NARRATIVE...]
+    if (/^\[PROBABLE CAUSE NARRATIVE/.test(t)) {
+      return `<p style="font-family:Arial;font-size:11pt;font-style:italic;color:#555;margin:8pt 0;">${esc(t)}</p>`;
+    }
+    // Default body paragraph
+    return `<p style="font-family:Arial;font-size:11pt;margin:0 0 6pt 0;">${esc(t)}</p>`;
+  }
+
+  const bodyHtml = currentText.split('\n').map(lineToHtml).join('\n');
+
+  // ── Wrap in Word HTML document ────────────────────────────────────────────
+  const wordHtml = `<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office"
+      xmlns:w="urn:schemas-microsoft-com:office:word"
+      xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<meta charset="utf-8">
+<title>Search Warrant — ${esc(platform.toUpperCase())}</title>
+<!--[if gte mso 9]>
+<xml>
+  <w:WordDocument>
+    <w:View>Normal</w:View>
+    <w:Zoom>100</w:Zoom>
+    <w:DoNotOptimizeForBrowser/>
+  </w:WordDocument>
+</xml>
+<![endif]-->
+<style>
+  @page {
+    size: 8.5in 11in;
+    margin: 1in 1in 1in 1in;
+    mso-header-margin: 0.5in;
+    mso-footer-margin: 0.5in;
+    mso-header: h1;
+    mso-footer: f1;
+  }
+  body { font-family: Arial; font-size: 11pt; line-height: 1.4; }
+  div.header { text-align:center; font-size:8pt; font-weight:bold; color:#444; }
+  div.footer { text-align:center; font-size:9pt; color:#444; }
+</style>
+</head>
+<body>
+<div class="header" style="font-family:Arial;font-size:8pt;font-weight:bold;text-align:center;color:#444;border-bottom:1pt solid #ccc;padding-bottom:4pt;margin-bottom:12pt;">
+  SEARCH WARRANT &mdash; ${esc(platform.toUpperCase())} &mdash; MARICOPA COUNTY, AZ &mdash; CONFIDENTIAL LAW ENFORCEMENT DOCUMENT
+</div>
+${bodyHtml}
+<div class="footer" style="font-family:Arial;font-size:9pt;text-align:center;color:#444;border-top:1pt solid #ccc;margin-top:18pt;padding-top:4pt;">
+  Phoenix Police Department &bull; Homicide Bureau &bull; Confidential Law Enforcement Document
+</div>
+</body>
+</html>`;
+
+  const blob = new Blob([wordHtml], { type: 'application/msword;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+  // Flash the button
+  const btn = document.getElementById('docxBtn');
+  btn.textContent = '✅ Downloaded!';
+  btn.classList.add('success');
+  setTimeout(() => { btn.textContent = '📄 Download Word Doc'; btn.classList.remove('success'); }, 2500);
+}
+</script>
+</body>
+</html>
